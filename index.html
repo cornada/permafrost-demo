@@ -103,33 +103,54 @@ body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:var(--
 <body>
 
 <div class="header">
-  <h1><span>Permafrost</span> Risk Map</h1>
+  <h1><span>Мерзлота</span> Карта рисков</h1>
   <div class="controls">
     <div class="control-group">
-      <label>Сценарий</label>
+      <label>Климат к 2050</label>
       <div class="btn-group" id="scenarioBtns">
-        <button class="btn" data-ssp="ssp126" onclick="setScenario('ssp126')">SSP1-2.6</button>
-        <button class="btn active" data-ssp="ssp245" onclick="setScenario('ssp245')">SSP2-4.5</button>
-        <button class="btn" data-ssp="ssp585" onclick="setScenario('ssp585')">SSP5-8.5</button>
+        <button class="btn" data-ssp="ssp126" onclick="setScenario('ssp126')">Благоприятный</button>
+        <button class="btn" data-ssp="ssp245" onclick="setScenario('ssp245')">Умеренный</button>
+        <button class="btn" data-ssp="ssp585" onclick="setScenario('ssp585')">Жёсткий</button>
       </div>
     </div>
     <div class="control-group">
-      <label>Метрика</label>
+      <label>Показатель</label>
       <div class="btn-group" id="metricBtns">
-        <button class="btn active" data-metric="magt" onclick="setMetric('magt')">MAGT</button>
-        <button class="btn" data-metric="alt_m" onclick="setMetric('alt_m')">СТС</button>
-        <button class="btn" data-metric="bearing_kPa" onclick="setMetric('bearing_kPa')">Bearing</button>
-        <button class="btn" data-metric="risk" onclick="setMetric('risk')">Риск</button>
+        <button class="btn" data-metric="magt" onclick="setMetric('magt')">Температура грунта</button>
+        <button class="btn" data-metric="alt_m" onclick="setMetric('alt_m')">Глубина оттаивания</button>
+        <button class="btn" data-metric="bearing_kPa" onclick="setMetric('bearing_kPa')">Несущая способность</button>
+        <button class="btn active" data-metric="risk" onclick="setMetric('risk')">Риск</button>
       </div>
     </div>
     <div class="control-group toggle-gtnp">
-      <button class="btn active" id="infraToggle" onclick="toggleInfra()">Объекты Газпрома</button>
-      <button class="btn active" id="gtnpToggle" onclick="toggleGTNP()">GTN-P скважины</button>
+      <button class="btn active" id="infraToggle" onclick="toggleInfra()">Объекты</button>
+      <button class="btn active" id="gtnpToggle" onclick="toggleGTNP()">Скважины GTN-P</button>
     </div>
   </div>
+  <div id="summaryBar" style="font-size:12px;color:var(--text2);white-space:nowrap;padding-left:8px"></div>
 </div>
 
 <div id="map"></div>
+
+<!-- Welcome overlay -->
+<div id="welcomeOverlay" style="position:fixed;top:50px;left:0;right:0;bottom:0;z-index:900;display:flex;align-items:center;justify-content:center;background:rgba(10,14,23,0.7);cursor:pointer" onclick="this.style.display='none'">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:480px;text-align:center" onclick="event.stopPropagation()">
+    <div style="font-size:36px;margin-bottom:12px">🗺️</div>
+    <div style="font-size:20px;font-weight:700;color:var(--accent);margin-bottom:8px">Карта рисков вечной мерзлоты</div>
+    <div style="font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:16px">
+      9 500+ точек по территории России<br>
+      3 климатических сценария до 2050 года<br>
+      54 скважины международной сети GTN-P<br>
+      11 объектов инфраструктуры
+    </div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:20px">
+      <b style="color:var(--text)">Как пользоваться:</b> выберите сценарий и показатель вверху.<br>
+      Нажмите на точку карты — увидите метрики.<br>
+      ⭐ — станции с детальным расчётом.
+    </div>
+    <button onclick="document.getElementById('welcomeOverlay').style.display='none'" style="padding:10px 32px;background:var(--accent);color:#000;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Открыть карту</button>
+  </div>
+</div>
 
 <div class="detail-panel" id="detailPanel">
   <button class="close-btn" onclick="closeDetail()">&times;</button>
@@ -142,7 +163,7 @@ body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:var(--
 
 let DATA = null;
 let currentScenario = 'ssp245';
-let currentMetric = 'magt';
+let currentMetric = 'risk';
 let gridLayer = null;
 let gtnpLayer = null;
 let starLayer = null;
@@ -270,16 +291,26 @@ function showCellPopup(cell, layer) {
   const container = document.createElement('div');
   container.className = 'cell-popup';
 
-  const h3 = document.createElement('h3');
+  // Risk badge FIRST (biggest visual impact)
+  var badgeTop = document.createElement('div');
+  badgeTop.style.cssText = 'margin-bottom:8px';
+  var badgeSpan = document.createElement('span');
+  badgeSpan.className = 'risk-badge';
+  badgeSpan.style.cssText = 'background:' + (rc[s.risk] || '#888') + ';color:#fff;font-size:13px;padding:4px 12px';
+  badgeSpan.textContent = s.risk_label;
+  badgeTop.appendChild(badgeSpan);
+  container.appendChild(badgeTop);
+
+  var h3 = document.createElement('h3');
   h3.textContent = cell.lat.toFixed(1) + '\u00b0N, ' + cell.lon.toFixed(1) + '\u00b0E';
   container.appendChild(h3);
 
-  const rows = [
-    ['MAAT (baseline)', cell.maat_baseline + '\u00b0C'],
-    ['MAAT (сценарий)', s.maat + '\u00b0C'],
-    ['MAGT (грунт)', (s.magt > 0 ? '+' : '') + s.magt + '\u00b0C'],
-    ['СТС (ALT)', s.alt_m !== null ? s.alt_m + ' м' : 'нет мерзлоты'],
-    ['Bearing capacity', s.has_permafrost ? s.bearing_kPa + ' кПа' : 'N/A (талый грунт)'],
+  var rows = [
+    ['T воздуха (текущая)', cell.maat_baseline + '\u00b0C'],
+    ['T воздуха (сценарий)', s.maat + '\u00b0C'],
+    ['T грунта', (s.magt > 0 ? '+' : '') + s.magt + '\u00b0C'],
+    ['Глубина оттаивания', s.alt_m !== null ? s.alt_m + ' м' : 'нет мерзлоты'],
+    ['Несущая способность', s.has_permafrost ? s.bearing_kPa + ' кПа' : 'N/A (талый грунт)'],
     ['Запас прочности', s.has_permafrost ? s.safety_ratio + '\u00d7' : '\u2014'],
   ];
   rows.forEach(function(r) {
@@ -296,14 +327,7 @@ function showCellPopup(cell, layer) {
     container.appendChild(row);
   });
 
-  const badge = document.createElement('span');
-  badge.className = 'risk-badge';
-  badge.style.background = rc[s.risk] || '#888';
-  badge.style.color = '#fff';
-  badge.textContent = s.risk_label;
-  const badgeWrap = document.createElement('div');
-  badgeWrap.appendChild(badge);
-  container.appendChild(badgeWrap);
+  // badge already at top
 
   layer.bindPopup(container, { maxWidth: 280 }).openPopup();
 }
@@ -412,10 +436,10 @@ function renderInfra() {
       if (sc) {
         var rc2 = { low:'#4caf50', moderate:'#ffc107', elevated:'#ff5722', critical:'#d32f2f' };
         var rows = [
-          ['MAGT (сценарий)', sc.magt + '\u00b0C'],
-          ['СТС (ALT)', sc.alt_m !== null ? sc.alt_m + ' м' : 'нет'],
-          ['Bearing capacity', sc.bearing_kPa + ' кПа'],
-          ['Запас прочности', sc.safety_ratio + '\u00d7'],
+          ['T грунта', (sc.magt > 0 ? '+' : '') + sc.magt + '\u00b0C'],
+          ['Глубина оттаивания', sc.alt_m !== null ? sc.alt_m + ' м' : 'нет'],
+          ['Несущая способность', sc.has_permafrost ? sc.bearing_kPa + ' кПа' : 'N/A'],
+          ['Запас прочности', sc.has_permafrost ? sc.safety_ratio + '\u00d7' : '\u2014'],
         ];
         rows.forEach(function(r) {
           var row = document.createElement('div');
@@ -947,7 +971,28 @@ function createLegend() {
   updateLegend();
 }
 
+function updateSummaryBar() {
+  var bar = document.getElementById('summaryBar');
+  if (!bar || !DATA) return;
+
+  var scenarioNames = { ssp126: 'Благоприятный (+1\u00b0C)', ssp245: 'Умеренный (+2.5\u00b0C)', ssp585: 'Жёсткий (+4.5\u00b0C)' };
+  var total = DATA.grid.length;
+  var pf = 0, critical = 0, elevated = 0;
+  for (var i = 0; i < total; i++) {
+    var s = DATA.grid[i].scenarios[currentScenario];
+    if (s.has_permafrost) pf++;
+    if (s.risk === 'critical') critical++;
+    if (s.risk === 'elevated') elevated++;
+  }
+  var pfPct = Math.round(100 * pf / total);
+  var atRisk = critical + elevated;
+  var atRiskPct = Math.round(100 * atRisk / total);
+
+  bar.textContent = scenarioNames[currentScenario] + ' \u2014 мерзлота: ' + pfPct + '% территории | повышенный/критический риск: ' + atRiskPct + '% (' + atRisk + ' из ' + total + ' ячеек)';
+}
+
 function updateLegend() {
+  updateSummaryBar();
   var div = document.getElementById('mapLegend');
   if (!div) return;
 
