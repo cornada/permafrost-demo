@@ -478,6 +478,75 @@ function toggleInfra() {
   showInfra = !showInfra;
   document.getElementById('infraToggle').classList.toggle('active', showInfra);
   renderInfra();
+  renderPipelines();
+}
+
+// ── Pipeline routes ──
+
+var pipelineLayer = null;
+
+var PIPELINES = [
+  {
+    name: 'Бованенково \u2014 Ухта',
+    detail: '~1 100 км, крупнейший газопровод по мерзлоте. Подводный переход через Байдарацкую губу.',
+    points: [
+      [70.4, 68.3],   // Бованенково
+      [70.0, 67.5],   // южнее по Ямалу
+      [69.2, 67.0],   // Байдарацкая губа — вход
+      [68.8, 65.5],   // Байдарацкая губа — подводный переход
+      [68.2, 64.0],   // выход на берег
+      [67.5, 62.0],   // Полярный Урал — предгорья
+      [66.8, 60.5],   // перевал
+      [66.0, 58.5],   // восточный склон Урала
+      [65.0, 57.0],   // Инта
+      [64.2, 55.5],   // подход к Ухте
+      [63.6, 53.7],   // Ухта
+    ],
+  },
+  {
+    name: 'Бованенково \u2014 Ямбург (внутр.)',
+    detail: 'Соединительный газопровод п-ов Ямал \u2014 ЯНАО',
+    points: [
+      [70.4, 68.3],   // Бованенково
+      [69.5, 69.0],
+      [68.8, 71.0],
+      [68.0, 73.0],
+      [67.9, 75.5],   // Ямбург
+    ],
+  },
+];
+
+function renderPipelines() {
+  if (pipelineLayer) map.removeLayer(pipelineLayer);
+  if (!showInfra) return;
+
+  var lines = [];
+  for (var i = 0; i < PIPELINES.length; i++) {
+    var p = PIPELINES[i];
+    var line = L.polyline(p.points, {
+      color: '#ff7043',
+      weight: 3,
+      opacity: 0.8,
+      dashArray: '8 4',
+    });
+    line._pipeData = p;
+    line.on('click', function() {
+      var pp = this._pipeData;
+      var container = document.createElement('div');
+      container.className = 'cell-popup';
+      var h3 = document.createElement('h3');
+      h3.style.color = '#ff7043';
+      h3.textContent = '\u26a1 ' + pp.name;
+      container.appendChild(h3);
+      var det = document.createElement('div');
+      det.style.cssText = 'font-size:12px;color:var(--text2);margin-top:4px';
+      det.textContent = pp.detail;
+      container.appendChild(det);
+      this.bindPopup(container, { maxWidth: 280 }).openPopup();
+    });
+    lines.push(line);
+  }
+  pipelineLayer = L.layerGroup(lines).addTo(map);
 }
 
 // ── Star points ──
@@ -1057,6 +1126,16 @@ function updateLegend() {
   gtnpItem.appendChild(document.createTextNode('GTN-P скважина'));
   div.appendChild(gtnpItem);
 
+  // Pipeline legend item
+  var pipeItem = document.createElement('div');
+  pipeItem.className = 'legend-item';
+  pipeItem.style.marginTop = '6px';
+  var pipeLine = document.createElement('div');
+  pipeLine.style.cssText = 'width:16px;height:3px;background:#ff7043;border-radius:1px';
+  pipeItem.appendChild(pipeLine);
+  pipeItem.appendChild(document.createTextNode('Газопровод'));
+  div.appendChild(pipeItem);
+
   // Infra legend item
   var infraItem = document.createElement('div');
   infraItem.className = 'legend-item';
@@ -1129,6 +1208,7 @@ async function init() {
   renderGrid();
   renderGTNP();
   renderInfra();
+  renderPipelines();
   renderStars();
   createLegend();
   createSourceBadge();
