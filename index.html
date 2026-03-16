@@ -219,7 +219,7 @@ function getCellColor(cell) {
 
 // ── Map ──
 
-const map = L.map('map', { center: [65, 100], zoom: 4, minZoom: 3, maxZoom: 8 });
+const map = L.map('map', { center: [65, 100], zoom: 4, minZoom: 3, maxZoom: 7, preferCanvas: true });
 
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; OSM &copy; CARTO',
@@ -228,23 +228,38 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
 
 // ── Grid ──
 
-function renderGrid() {
-  if (gridLayer) map.removeLayer(gridLayer);
-  const step = DATA.metadata.grid_step_deg;
-  const half = step / 2;
-  const rects = [];
+var gridRects = []; // persistent array for style updates
 
-  for (const cell of DATA.grid) {
-    const color = getCellColor(cell);
+function renderGrid() {
+  if (gridRects.length > 0) {
+    // Fast path: update colors in-place (no DOM rebuild)
+    for (var i = 0; i < gridRects.length; i++) {
+      var color = getCellColor(gridRects[i]._cellData);
+      gridRects[i].setStyle({ fillColor: color });
+    }
+    return;
+  }
+
+  // First render: create all rectangles once
+  if (gridLayer) map.removeLayer(gridLayer);
+  var step = DATA.metadata.grid_step_deg;
+  var half = step / 2;
+  var rects = [];
+
+  for (var j = 0; j < DATA.grid.length; j++) {
+    var cell = DATA.grid[j];
+    var color = getCellColor(cell);
     if (color === 'transparent') continue;
 
-    const rect = L.rectangle(
+    var rect = L.rectangle(
       [[cell.lat - half, cell.lon], [cell.lat + half, cell.lon + step]],
       { color: 'none', fillColor: color, fillOpacity: 1, weight: 0 }
     );
-    rect.on('click', function() { showCellPopup(cell, this); });
+    rect._cellData = cell;
+    rect.on('click', function() { showCellPopup(this._cellData, this); });
     rects.push(rect);
   }
+  gridRects = rects;
   gridLayer = L.layerGroup(rects).addTo(map);
 }
 
@@ -262,10 +277,10 @@ function showCellPopup(cell, layer) {
   const rows = [
     ['MAAT (baseline)', cell.maat_baseline + '\u00b0C'],
     ['MAAT (сценарий)', s.maat + '\u00b0C'],
-    ['MAGT (грунт)', s.magt + '\u00b0C'],
+    ['MAGT (грунт)', (s.magt > 0 ? '+' : '') + s.magt + '\u00b0C'],
     ['СТС (ALT)', s.alt_m !== null ? s.alt_m + ' м' : 'нет мерзлоты'],
-    ['Bearing capacity', s.bearing_kPa + ' кПа'],
-    ['Запас прочности', s.safety_ratio + '\u00d7'],
+    ['Bearing capacity', s.has_permafrost ? s.bearing_kPa + ' кПа' : 'N/A (талый грунт)'],
+    ['Запас прочности', s.has_permafrost ? s.safety_ratio + '\u00d7' : '\u2014'],
   ];
   rows.forEach(function(r) {
     const row = document.createElement('div');
@@ -898,6 +913,7 @@ function closeDetail() {
 
 function setScenario(ssp) {
   currentScenario = ssp;
+  map.closePopup();
   document.querySelectorAll('#scenarioBtns .btn').forEach(function(b) {
     b.classList.toggle('active', b.dataset.ssp === ssp);
   });
@@ -907,6 +923,7 @@ function setScenario(ssp) {
 
 function setMetric(metric) {
   currentMetric = metric;
+  map.closePopup();
   document.querySelectorAll('#metricBtns .btn').forEach(function(b) {
     b.classList.toggle('active', b.dataset.metric === metric);
   });
@@ -1043,6 +1060,8 @@ function createSourceBadge() {
   div.appendChild(a2);
 
   div.appendChild(document.createTextNode(' | Нормы \u2014 СП 25.13330.2020'));
+  div.appendChild(document.createElement('br'));
+  div.appendChild(document.createTextNode('Baseline: WorldClim 1970\u20132000. \u0394T сценариев \u2014 дополнительное потепление к 2050 (Arctic amplification \u00d72\u20134, IPCC AR6).'));
   document.body.appendChild(div);
 }
 
