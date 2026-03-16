@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Permafrost Risk Map — Россия</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0e17; --surface: #131a2b; --card: #1a2340;
+  --accent: #4fc3f7; --accent2: #ff7043; --accent3: #66bb6a;
+  --text: #e0e6f0; --text2: #8892a8; --border: #2a3555;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:var(--bg); color:var(--text); overflow:hidden; height:100vh; }
+
+.header {
+  background: var(--surface); border-bottom:1px solid var(--border);
+  padding:10px 20px; display:flex; align-items:center; gap:20px; z-index:1000; position:relative;
+}
+.header h1 { font-size:18px; font-weight:700; white-space:nowrap; }
+.header h1 span { color:var(--accent); }
+
+.controls { display:flex; gap:8px; align-items:center; flex:1; flex-wrap:wrap; }
+.control-group { display:flex; align-items:center; gap:6px; }
+.control-group label { font-size:11px; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; }
+.btn-group { display:flex; gap:2px; }
+.btn {
+  padding:6px 14px; border:1px solid var(--border); border-radius:6px;
+  background:var(--card); color:var(--text2); cursor:pointer; font-size:12px;
+  font-family:inherit; transition:all 0.2s; white-space:nowrap;
+}
+.btn:hover { border-color:var(--accent); color:var(--text); }
+.btn.active { border-color:var(--accent); color:var(--accent); background:rgba(79,195,247,0.12); font-weight:600; }
+.toggle-gtnp { margin-left:auto; }
+
+#map { height:calc(100vh - 50px); width:100%; }
+
+.cell-popup h3 { color:var(--accent); margin-bottom:6px; font-size:14px; }
+.cell-popup .row { display:flex; justify-content:space-between; padding:2px 0; font-size:12px; }
+.cell-popup .label { color:#888; }
+.cell-popup .val { font-weight:600; }
+.cell-popup .risk-badge {
+  display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px;
+  font-weight:600; margin-top:4px;
+}
+
+.detail-panel {
+  position:fixed; top:50px; right:0; width:420px; height:calc(100vh - 50px);
+  background:var(--surface); border-left:1px solid var(--border);
+  z-index:999; transform:translateX(100%); transition:transform 0.3s ease;
+  overflow-y:auto; padding:20px;
+}
+.detail-panel.open { transform:translateX(0); }
+.detail-panel .close-btn {
+  position:absolute; top:12px; right:12px; background:none; border:none;
+  color:var(--text2); font-size:20px; cursor:pointer;
+}
+.detail-panel .close-btn:hover { color:var(--text); }
+.detail-panel h2 { font-size:18px; color:var(--accent); margin-bottom:4px; }
+.detail-panel .subtitle { color:var(--text2); font-size:12px; margin-bottom:16px; }
+.detail-panel .metrics-grid {
+  display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;
+}
+.metric-card {
+  background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:12px; text-align:center;
+}
+.metric-card .val { font-size:22px; font-weight:700; color:var(--accent); }
+.metric-card .lbl { font-size:10px; color:var(--text2); text-transform:uppercase; margin-top:2px; }
+.chart-box {
+  background:var(--card); border:1px solid var(--border); border-radius:10px;
+  padding:14px; margin-bottom:14px;
+}
+.chart-box h4 { font-size:12px; color:var(--text2); text-transform:uppercase; margin-bottom:8px; }
+
+.map-legend {
+  position:absolute; bottom:30px; left:10px; z-index:800;
+  background:rgba(19,26,43,0.92); border:1px solid var(--border);
+  border-radius:10px; padding:12px 16px; min-width:180px;
+}
+.map-legend h4 { font-size:11px; color:var(--text2); text-transform:uppercase; margin-bottom:6px; }
+.legend-bar { width:100%; height:14px; border-radius:3px; margin-bottom:4px; }
+.legend-labels { display:flex; justify-content:space-between; font-size:10px; color:var(--text2); }
+.legend-item { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text2); margin-top:4px; }
+.legend-dot { width:10px; height:10px; border-radius:50%; }
+
+.source-badge {
+  position:absolute; bottom:30px; right:10px; z-index:800;
+  background:rgba(19,26,43,0.92); border:1px solid var(--border);
+  border-radius:8px; padding:8px 12px; font-size:10px; color:var(--text2);
+  max-width:280px; line-height:1.5;
+}
+.source-badge a { color:var(--accent); text-decoration:none; }
+
+.leaflet-popup-content-wrapper { background:var(--card); color:var(--text); border:1px solid var(--border); border-radius:10px; }
+.leaflet-popup-tip { background:var(--card); }
+.leaflet-popup-close-button { color:var(--text2) !important; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span>Permafrost</span> Risk Map</h1>
+  <div class="controls">
+    <div class="control-group">
+      <label>Сценарий</label>
+      <div class="btn-group" id="scenarioBtns">
+        <button class="btn" data-ssp="ssp126" onclick="setScenario('ssp126')">SSP1-2.6</button>
+        <button class="btn active" data-ssp="ssp245" onclick="setScenario('ssp245')">SSP2-4.5</button>
+        <button class="btn" data-ssp="ssp585" onclick="setScenario('ssp585')">SSP5-8.5</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Метрика</label>
+      <div class="btn-group" id="metricBtns">
+        <button class="btn active" data-metric="magt" onclick="setMetric('magt')">MAGT</button>
+        <button class="btn" data-metric="alt_m" onclick="setMetric('alt_m')">СТС</button>
+        <button class="btn" data-metric="bearing_kPa" onclick="setMetric('bearing_kPa')">Bearing</button>
+        <button class="btn" data-metric="risk" onclick="setMetric('risk')">Риск</button>
+      </div>
+    </div>
+    <div class="control-group toggle-gtnp">
+      <button class="btn active" id="gtnpToggle" onclick="toggleGTNP()">GTN-P скважины</button>
+    </div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div class="detail-panel" id="detailPanel">
+  <button class="close-btn" onclick="closeDetail()">&times;</button>
+  <div id="detailContent"></div>
+</div>
+
+<script>
+// All data is loaded from a known JSON structure produced by generate_heatmap_data.py.
+// Cell values are numeric/string (no user input), so DOM construction below is safe from injection.
+
+let DATA = null;
+let currentScenario = 'ssp245';
+let currentMetric = 'magt';
+let gridLayer = null;
+let gtnpLayer = null;
+let starLayer = null;
+let showGTNP = true;
+
+const STARS = [
+  { name: 'Якутск', lat: 62.0, lon: 129.7 },
+  { name: 'Надым', lat: 65.5, lon: 72.5 },
+  { name: 'Игарка', lat: 67.5, lon: 86.6 },
+];
+
+// ── Color scales ──
+
+function magtColor(v) {
+  if (v === null || v === undefined) return 'transparent';
+  if (v >= 0) return 'rgba(180,180,180,0.3)';
+  const t = Math.max(0, Math.min(1, (v + 15) / 15));
+  const r = Math.round(30 + 225 * t);
+  const g = Math.round(60 + 60 * (1 - Math.abs(t - 0.5) * 2));
+  const b = Math.round(220 * (1 - t));
+  return 'rgba(' + r + ',' + g + ',' + b + ',0.7)';
+}
+
+function altColor(v) {
+  if (v === null || v === undefined) return 'rgba(180,180,180,0.3)';
+  const t = Math.max(0, Math.min(1, v / 5));
+  const r = Math.round(40 + 215 * t);
+  const g = Math.round(120 - 60 * t);
+  const b = Math.round(220 * (1 - t));
+  return 'rgba(' + r + ',' + g + ',' + b + ',0.7)';
+}
+
+function bearingColor(v) {
+  if (v === null || v === undefined) return 'rgba(180,180,180,0.3)';
+  const t = Math.max(0, Math.min(1, v / 500));
+  const r = Math.round(220 * (1 - t));
+  const g = Math.round(60 + 160 * t);
+  const b = 40;
+  return 'rgba(' + r + ',' + g + ',' + b + ',0.7)';
+}
+
+const RISK_COLORS = { low:'rgba(46,125,50,0.7)', moderate:'rgba(249,168,37,0.7)', elevated:'rgba(230,81,0,0.7)', critical:'rgba(183,28,28,0.7)' };
+
+function riskColor(v) { return RISK_COLORS[v] || 'rgba(180,180,180,0.3)'; }
+
+function getCellColor(cell) {
+  const s = cell.scenarios[currentScenario];
+  if (!s) return 'transparent';
+  switch(currentMetric) {
+    case 'magt': return magtColor(s.magt);
+    case 'alt_m': return altColor(s.alt_m);
+    case 'bearing_kPa': return bearingColor(s.bearing_kPa);
+    case 'risk': return riskColor(s.risk);
+    default: return magtColor(s.magt);
+  }
+}
+
+// ── Map ──
+
+const map = L.map('map', { center: [65, 100], zoom: 4, minZoom: 3, maxZoom: 8 });
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OSM &copy; CARTO',
+  subdomains: 'abcd', maxZoom: 19,
+}).addTo(map);
+
+// ── Grid ──
+
+function renderGrid() {
+  if (gridLayer) map.removeLayer(gridLayer);
+  const step = DATA.metadata.grid_step_deg;
+  const half = step / 2;
+  const rects = [];
+
+  for (const cell of DATA.grid) {
+    const color = getCellColor(cell);
+    if (color === 'transparent') continue;
+
+    const rect = L.rectangle(
+      [[cell.lat - half, cell.lon], [cell.lat + half, cell.lon + step]],
+      { color: 'none', fillColor: color, fillOpacity: 1, weight: 0 }
+    );
+    rect.on('click', function() { showCellPopup(cell, this); });
+    rects.push(rect);
+  }
+  gridLayer = L.layerGroup(rects).addTo(map);
+}
+
+function showCellPopup(cell, layer) {
+  const s = cell.scenarios[currentScenario];
+  const rc = { low:'#4caf50', moderate:'#ffc107', elevated:'#ff5722', critical:'#d32f2f' };
+
+  const container = document.createElement('div');
+  container.className = 'cell-popup';
+
+  const h3 = document.createElement('h3');
+  h3.textContent = cell.lat.toFixed(1) + '\u00b0N, ' + cell.lon.toFixed(1) + '\u00b0E';
+  container.appendChild(h3);
+
+  const rows = [
+    ['MAAT (baseline)', cell.maat_baseline + '\u00b0C'],
+    ['MAAT (сценарий)', s.maat + '\u00b0C'],
+    ['MAGT (грунт)', s.magt + '\u00b0C'],
+    ['СТС (ALT)', s.alt_m !== null ? s.alt_m + ' м' : 'нет мерзлоты'],
+    ['Bearing capacity', s.bearing_kPa + ' кПа'],
+    ['Запас прочности', s.safety_ratio + '\u00d7'],
+  ];
+  rows.forEach(function(r) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const lbl = document.createElement('span');
+    lbl.className = 'label';
+    lbl.textContent = r[0];
+    const val = document.createElement('span');
+    val.className = 'val';
+    val.textContent = r[1];
+    row.appendChild(lbl);
+    row.appendChild(val);
+    container.appendChild(row);
+  });
+
+  const badge = document.createElement('span');
+  badge.className = 'risk-badge';
+  badge.style.background = rc[s.risk] || '#888';
+  badge.style.color = '#fff';
+  badge.textContent = s.risk_label;
+  const badgeWrap = document.createElement('div');
+  badgeWrap.appendChild(badge);
+  container.appendChild(badgeWrap);
+
+  layer.bindPopup(container, { maxWidth: 280 }).openPopup();
+}
+
+// ── GTN-P ──
+
+function renderGTNP() {
+  if (gtnpLayer) map.removeLayer(gtnpLayer);
+  if (!showGTNP) return;
+  const markers = [];
+  for (const b of DATA.boreholes) {
+    if (b.lat < 40 || b.lat > 80) continue;
+    const isRu = b.country === 'Russia';
+    const marker = L.circleMarker([b.lat, b.lon], {
+      radius: isRu ? 5 : 3,
+      fillColor: isRu ? '#66bb6a' : '#90a4ae',
+      color: isRu ? '#2e7d32' : '#607d8b',
+      weight: 1, fillOpacity: 0.9,
+    });
+    marker.on('click', function() { showBoreholePopup(b, this); });
+    markers.push(marker);
+  }
+  gtnpLayer = L.layerGroup(markers).addTo(map);
+}
+
+function showBoreholePopup(b, layer) {
+  const container = document.createElement('div');
+  container.className = 'cell-popup';
+
+  const h3 = document.createElement('h3');
+  h3.textContent = b.name;
+  container.appendChild(h3);
+
+  const rows = [
+    ['Страна', b.country],
+    ['MAGT (измер.)', b.magt + '\u00b0C'],
+    ['Глубина', b.depth_m + ' м'],
+    ['Лет данных', String(b.n_years)],
+  ];
+  rows.forEach(function(r) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const lbl = document.createElement('span');
+    lbl.className = 'label';
+    lbl.textContent = r[0];
+    const val = document.createElement('span');
+    val.className = 'val';
+    val.textContent = r[1];
+    if (r[0].indexOf('MAGT') >= 0) val.style.color = '#66bb6a';
+    row.appendChild(lbl);
+    row.appendChild(val);
+    container.appendChild(row);
+  });
+
+  const src = document.createElement('div');
+  src.style.cssText = 'margin-top:6px;font-size:10px;color:#888';
+  src.textContent = 'Источник: GTN-P / Biskaborn et al. 2019';
+  container.appendChild(src);
+
+  layer.bindPopup(container, { maxWidth: 260 }).openPopup();
+}
+
+// ── Stars ──
+
+function renderStars() {
+  if (starLayer) map.removeLayer(starLayer);
+  const markers = [];
+  for (const star of STARS) {
+    const icon = L.divIcon({
+      html: '<div style="font-size:24px;text-shadow:0 0 8px rgba(79,195,247,0.8);cursor:pointer;line-height:1">\u2B50</div>',
+      className: '', iconSize: [28, 28], iconAnchor: [14, 14],
+    });
+    const marker = L.marker([star.lat, star.lon], { icon: icon, zIndexOffset: 1000 });
+    marker.on('click', function() { openDetail(star); });
+    marker.bindTooltip(star.name, { permanent: false, direction: 'top', offset: [0, -14] });
+    markers.push(marker);
+  }
+  starLayer = L.layerGroup(markers).addTo(map);
+}
+
+// ── Detail panel ──
+
+function openDetail(star) {
+  let best = null, bestDist = Infinity;
+  for (const cell of DATA.grid) {
+    const d = Math.abs(cell.lat - star.lat) + Math.abs(cell.lon - star.lon);
+    if (d < bestDist) { bestDist = d; best = cell; }
+  }
+
+  const panel = document.getElementById('detailPanel');
+  const content = document.getElementById('detailContent');
+  // Clear previous content safely
+  while (content.firstChild) content.removeChild(content.firstChild);
+
+  const scenarios = ['ssp126', 'ssp245', 'ssp585'];
+  const labels = { ssp126: 'SSP1-2.6', ssp245: 'SSP2-4.5', ssp585: 'SSP5-8.5' };
+  const rc = { low:'#4caf50', moderate:'#ffc107', elevated:'#ff5722', critical:'#d32f2f' };
+
+  // Title
+  const h2 = document.createElement('h2');
+  h2.textContent = '\u2B50 ' + star.name;
+  content.appendChild(h2);
+
+  const sub = document.createElement('div');
+  sub.className = 'subtitle';
+  sub.textContent = star.lat + '\u00b0N, ' + star.lon + '\u00b0E \u2014 Детальная станция';
+  content.appendChild(sub);
+
+  if (best) {
+    const s = best.scenarios[currentScenario];
+
+    // Metrics grid
+    const grid = document.createElement('div');
+    grid.className = 'metrics-grid';
+    const metricsData = [
+      [s.magt + '\u00b0C', 'MAGT'],
+      [s.alt_m !== null ? s.alt_m + 'м' : '\u2014', 'СТС (ALT)'],
+      [String(s.bearing_kPa), 'кПа'],
+      [s.safety_ratio + '\u00d7', 'Запас'],
+    ];
+    metricsData.forEach(function(m) {
+      const card = document.createElement('div');
+      card.className = 'metric-card';
+      const vEl = document.createElement('div');
+      vEl.className = 'val';
+      vEl.textContent = m[0];
+      const lEl = document.createElement('div');
+      lEl.className = 'lbl';
+      lEl.textContent = m[1];
+      card.appendChild(vEl);
+      card.appendChild(lEl);
+      grid.appendChild(card);
+    });
+    content.appendChild(grid);
+
+    // Scenario comparison table
+    const tableBox = document.createElement('div');
+    tableBox.className = 'chart-box';
+    const tableTitle = document.createElement('h4');
+    tableTitle.textContent = 'Сравнение сценариев';
+    tableBox.appendChild(tableTitle);
+
+    const table = document.createElement('table');
+    table.style.cssText = 'width:100%;font-size:12px;border-collapse:collapse';
+
+    const thead = document.createElement('tr');
+    thead.style.color = 'var(--text2)';
+    ['Сценарий', 'MAGT', 'СТС', 'BC (кПа)', 'Риск'].forEach(function(t) {
+      const th = document.createElement('th');
+      th.style.cssText = 'text-align:left;padding:4px';
+      th.textContent = t;
+      thead.appendChild(th);
+    });
+    table.appendChild(thead);
+
+    scenarios.forEach(function(ssp) {
+      const sc = best.scenarios[ssp];
+      const tr = document.createElement('tr');
+      const cells = [
+        labels[ssp],
+        sc.magt + '\u00b0C',
+        sc.alt_m !== null ? sc.alt_m + 'м' : '\u2014',
+        String(sc.bearing_kPa),
+      ];
+      cells.forEach(function(c, idx) {
+        const td = document.createElement('td');
+        td.style.cssText = idx === 0 ? 'padding:4px;font-weight:600' : 'text-align:center;padding:4px';
+        td.textContent = c;
+        tr.appendChild(td);
+      });
+      // Risk badge cell
+      const tdRisk = document.createElement('td');
+      tdRisk.style.textAlign = 'center';
+      const riskSpan = document.createElement('span');
+      riskSpan.style.cssText = 'background:' + (rc[sc.risk] || '#888') + ';color:#fff;padding:1px 6px;border-radius:8px;font-size:10px';
+      riskSpan.textContent = sc.risk_label;
+      tdRisk.appendChild(riskSpan);
+      tr.appendChild(tdRisk);
+      table.appendChild(tr);
+    });
+    tableBox.appendChild(table);
+    content.appendChild(tableBox);
+
+    // Bearing capacity chart
+    const bcBox = document.createElement('div');
+    bcBox.className = 'chart-box';
+    const bcTitle = document.createElement('h4');
+    bcTitle.textContent = 'Несущая способность по сценариям';
+    bcBox.appendChild(bcTitle);
+    const bcCanvas = document.createElement('canvas');
+    bcCanvas.id = 'bcChart';
+    bcCanvas.height = 160;
+    bcBox.appendChild(bcCanvas);
+    content.appendChild(bcBox);
+
+    // MAGT chart
+    const magtBox = document.createElement('div');
+    magtBox.className = 'chart-box';
+    const magtTitle = document.createElement('h4');
+    magtTitle.textContent = 'Температура грунта по сценариям';
+    magtBox.appendChild(magtTitle);
+    const magtCanvas = document.createElement('canvas');
+    magtCanvas.id = 'magtChart';
+    magtCanvas.height = 160;
+    magtBox.appendChild(magtCanvas);
+    content.appendChild(magtBox);
+  }
+
+  // Nearby GTN-P boreholes
+  const nearby = DATA.boreholes.filter(function(b) {
+    return Math.abs(b.lat - star.lat) < 2 && Math.abs(b.lon - star.lon) < 5;
+  });
+  if (nearby.length > 0) {
+    const nearBox = document.createElement('div');
+    nearBox.className = 'chart-box';
+    const nearTitle = document.createElement('h4');
+    nearTitle.textContent = 'Ближайшие скважины GTN-P';
+    nearBox.appendChild(nearTitle);
+    nearby.slice(0, 5).forEach(function(b) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;padding:3px 0;font-size:12px';
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = b.name;
+      const valSpan = document.createElement('span');
+      valSpan.style.cssText = 'color:#66bb6a;font-weight:600';
+      valSpan.textContent = b.magt + '\u00b0C';
+      row.appendChild(nameSpan);
+      row.appendChild(valSpan);
+      nearBox.appendChild(row);
+    });
+    content.appendChild(nearBox);
+  }
+
+  // Sources footer
+  const srcDiv = document.createElement('div');
+  srcDiv.style.cssText = 'margin-top:16px;padding:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:11px;color:var(--text2)';
+  const srcStrong = document.createElement('strong');
+  srcStrong.style.color = 'var(--text)';
+  srcStrong.textContent = 'Источники данных:';
+  srcDiv.appendChild(srcStrong);
+  srcDiv.appendChild(document.createElement('br'));
+  srcDiv.appendChild(document.createTextNode('Климат: WorldClim v2.1 (Fick & Hijmans 2017)'));
+  srcDiv.appendChild(document.createElement('br'));
+  srcDiv.appendChild(document.createTextNode('Наблюдения: GTN-P / PANGAEA (Biskaborn et al. 2019)'));
+  srcDiv.appendChild(document.createElement('br'));
+  srcDiv.appendChild(document.createTextNode('Модель: Kudryavtsev (1974) + Stefan + СП 25.13330.2020'));
+  content.appendChild(srcDiv);
+
+  panel.classList.add('open');
+
+  // Render charts
+  setTimeout(function() { if (best) renderDetailCharts(best); }, 100);
+}
+
+function renderDetailCharts(cell) {
+  const scenarios = ['ssp126', 'ssp245', 'ssp585'];
+  const colors = ['#2196f3', '#ff9800', '#f44336'];
+  const lbls = ['SSP1-2.6', 'SSP2-4.5', 'SSP5-8.5'];
+
+  const bcCtx = document.getElementById('bcChart');
+  if (bcCtx) {
+    new Chart(bcCtx, {
+      type: 'bar',
+      data: {
+        labels: lbls,
+        datasets: [{ data: scenarios.map(function(s) { return cell.scenarios[s].bearing_kPa; }),
+          backgroundColor: colors.map(function(c) { return c + '88'; }),
+          borderColor: colors, borderWidth: 2 }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { title: { display: true, text: 'кПа', color: '#8892a8' }, ticks: { color: '#8892a8' }, grid: { color: '#2a355522' } },
+          x: { ticks: { color: '#8892a8' }, grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  const magtCtx = document.getElementById('magtChart');
+  if (magtCtx) {
+    new Chart(magtCtx, {
+      type: 'bar',
+      data: {
+        labels: lbls,
+        datasets: [{ data: scenarios.map(function(s) { return cell.scenarios[s].magt; }),
+          backgroundColor: scenarios.map(function(s) {
+            var v = cell.scenarios[s].magt;
+            return v < -3 ? '#1565c0aa' : v < -1 ? '#ff9800aa' : '#d32f2faa';
+          }),
+          borderColor: scenarios.map(function(s) {
+            var v = cell.scenarios[s].magt;
+            return v < -3 ? '#1565c0' : v < -1 ? '#ff9800' : '#d32f2f';
+          }),
+          borderWidth: 2 }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { title: { display: true, text: '\u00b0C', color: '#8892a8' }, ticks: { color: '#8892a8' }, grid: { color: '#2a355522' } },
+          x: { ticks: { color: '#8892a8' }, grid: { display: false } },
+        },
+      },
+    });
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+}
+
+// ── Controls ──
+
+function setScenario(ssp) {
+  currentScenario = ssp;
+  document.querySelectorAll('#scenarioBtns .btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.ssp === ssp);
+  });
+  renderGrid();
+  updateLegend();
+}
+
+function setMetric(metric) {
+  currentMetric = metric;
+  document.querySelectorAll('#metricBtns .btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.metric === metric);
+  });
+  renderGrid();
+  updateLegend();
+}
+
+function toggleGTNP() {
+  showGTNP = !showGTNP;
+  document.getElementById('gtnpToggle').classList.toggle('active', showGTNP);
+  renderGTNP();
+}
+
+// ── Legend ──
+
+function createLegend() {
+  var div = document.createElement('div');
+  div.className = 'map-legend';
+  div.id = 'mapLegend';
+  document.body.appendChild(div);
+  updateLegend();
+}
+
+function updateLegend() {
+  var div = document.getElementById('mapLegend');
+  if (!div) return;
+
+  // Clear
+  while (div.firstChild) div.removeChild(div.firstChild);
+
+  var configs = {
+    magt: { title: 'Температура грунта (MAGT)', gradient: 'linear-gradient(to right, #1e3adc, #2060a0, #40a080, #d0a030, #dc3020)', labels: ['-15\u00b0C', '-10\u00b0C', '-5\u00b0C', '-1\u00b0C', '0\u00b0C'] },
+    alt_m: { title: 'Сезонноталый слой (СТС)', gradient: 'linear-gradient(to right, #2850dc, #4088a0, #80a040, #d06020, #dc3020)', labels: ['0 м', '1 м', '2.5 м', '4 м', '5+ м'] },
+    bearing_kPa: { title: 'Несущая способность (кПа)', gradient: 'linear-gradient(to right, #d32f2f, #e65100, #f9a825, #66bb6a, #2e7d32)', labels: ['0', '100', '250', '400', '500+'] },
+    risk: { title: 'Категория риска', items: [
+      { color: '#2e7d32', label: 'Низкий (>2\u00d7)' },
+      { color: '#f9a825', label: 'Умеренный (1.5-2\u00d7)' },
+      { color: '#e65100', label: 'Повышенный (1-1.5\u00d7)' },
+      { color: '#b71c1c', label: 'Критический (<1\u00d7)' },
+    ]},
+  };
+
+  var cfg = configs[currentMetric];
+
+  var h4 = document.createElement('h4');
+  h4.textContent = cfg.title;
+  div.appendChild(h4);
+
+  if (cfg.gradient) {
+    var bar = document.createElement('div');
+    bar.className = 'legend-bar';
+    bar.style.background = cfg.gradient;
+    div.appendChild(bar);
+
+    var lblRow = document.createElement('div');
+    lblRow.className = 'legend-labels';
+    cfg.labels.forEach(function(l) {
+      var sp = document.createElement('span');
+      sp.textContent = l;
+      lblRow.appendChild(sp);
+    });
+    div.appendChild(lblRow);
+  }
+
+  if (cfg.items) {
+    cfg.items.forEach(function(item) {
+      var row = document.createElement('div');
+      row.className = 'legend-item';
+      var dot = document.createElement('div');
+      dot.className = 'legend-dot';
+      dot.style.background = item.color;
+      row.appendChild(dot);
+      row.appendChild(document.createTextNode(item.label));
+      div.appendChild(row);
+    });
+  }
+
+  // GTN-P legend item
+  var gtnpItem = document.createElement('div');
+  gtnpItem.className = 'legend-item';
+  gtnpItem.style.marginTop = '6px';
+  var gtnpDot = document.createElement('div');
+  gtnpDot.className = 'legend-dot';
+  gtnpDot.style.cssText = 'background:#66bb6a;border:1px solid #2e7d32';
+  gtnpItem.appendChild(gtnpDot);
+  gtnpItem.appendChild(document.createTextNode('GTN-P скважина'));
+  div.appendChild(gtnpItem);
+
+  // Star legend item
+  var starItem = document.createElement('div');
+  starItem.className = 'legend-item';
+  var starIcon = document.createElement('div');
+  starIcon.style.cssText = 'font-size:14px;width:10px;text-align:center';
+  starIcon.textContent = '\u2B50';
+  starItem.appendChild(starIcon);
+  starItem.appendChild(document.createTextNode('Детальный расчёт'));
+  div.appendChild(starItem);
+}
+
+// ── Source badge ──
+
+function createSourceBadge() {
+  var div = document.createElement('div');
+  div.className = 'source-badge';
+
+  var strong = document.createElement('strong');
+  strong.textContent = 'Источники: ';
+  div.appendChild(strong);
+
+  div.appendChild(document.createTextNode('Климат \u2014 '));
+  var a1 = document.createElement('a');
+  a1.href = 'https://worldclim.org';
+  a1.textContent = 'WorldClim v2.1';
+  a1.target = '_blank';
+  a1.rel = 'noopener';
+  div.appendChild(a1);
+
+  div.appendChild(document.createTextNode(' | Мерзлота \u2014 '));
+  var a2 = document.createElement('a');
+  a2.href = 'https://doi.org/10.1594/PANGAEA.884711';
+  a2.textContent = 'GTN-P';
+  a2.target = '_blank';
+  a2.rel = 'noopener';
+  div.appendChild(a2);
+
+  div.appendChild(document.createTextNode(' | Нормы \u2014 СП 25.13330.2020'));
+  document.body.appendChild(div);
+}
+
+// ── Init ──
+
+async function init() {
+  try {
+    var resp = await fetch('HEATMAP_DATA.json');
+    DATA = await resp.json();
+  } catch(e) {
+    console.error('Failed to fetch HEATMAP_DATA.json:', e);
+    var errDiv = document.createElement('div');
+    errDiv.style.cssText = 'padding:40px;text-align:center;color:#ff5252';
+    errDiv.textContent = 'Не удалось загрузить HEATMAP_DATA.json. Запустите через HTTP-сервер: python3 -m http.server 8080';
+    document.getElementById('map').appendChild(errDiv);
+    return;
+  }
+
+  console.log('Loaded: ' + DATA.grid.length + ' cells, ' + DATA.boreholes.length + ' boreholes');
+  renderGrid();
+  renderGTNP();
+  renderStars();
+  createLegend();
+  createSourceBadge();
+}
+
+init();
+</script>
+</body>
+</html>
