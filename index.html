@@ -148,9 +148,9 @@ let starLayer = null;
 let showGTNP = true;
 
 const STARS = [
-  { name: 'Якутск', lat: 62.0, lon: 129.7 },
-  { name: 'Надым', lat: 65.5, lon: 72.5 },
-  { name: 'Игарка', lat: 67.5, lon: 86.6 },
+  { name: 'Надым', lat: 65.5, lon: 72.5, desc: 'Штаб Газпром добыча Надым. Рекорд деградации: +62 см/десятилетие' },
+  { name: 'Бованенково', lat: 70.4, lon: 68.3, desc: 'Крупнейшее месторождение Ямала (115 млрд м³/год). Кратеры 2023-2024 рядом' },
+  { name: 'Норильск', lat: 69.3, lon: 88.1, desc: 'Кейс 2020: разлив 21К тонн, штраф 146 млрд руб. 70% зданий деформированы' },
 ];
 
 // ── Color scales ──
@@ -376,8 +376,15 @@ function openDetail(star) {
 
   const sub = document.createElement('div');
   sub.className = 'subtitle';
-  sub.textContent = star.lat + '\u00b0N, ' + star.lon + '\u00b0E \u2014 Детальная станция';
+  sub.textContent = star.lat + '\u00b0N, ' + star.lon + '\u00b0E';
   content.appendChild(sub);
+
+  if (star.desc) {
+    var descDiv = document.createElement('div');
+    descDiv.style.cssText = 'background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.2);border-radius:8px;padding:10px;margin-bottom:16px;font-size:12px;line-height:1.5';
+    descDiv.textContent = star.desc;
+    content.appendChild(descDiv);
+  }
 
   if (best) {
     const s = best.scenarios[currentScenario];
