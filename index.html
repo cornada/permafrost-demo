@@ -486,6 +486,103 @@ function openDetail(star) {
     content.appendChild(magtBox);
   }
 
+  // ── Pipeline results (if available) ──
+  var starData = null;
+  if (DATA.star_details) {
+    starData = DATA.star_details.find(function(sd) { return sd.name === star.name; });
+  }
+  if (starData) {
+    // Pipeline header
+    var pipeHeader = document.createElement('div');
+    pipeHeader.style.cssText = 'background:rgba(255,112,67,0.08);border:1px solid rgba(255,112,67,0.2);border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px;color:var(--accent2)';
+    pipeHeader.textContent = '\u2699 Детальный расчёт: ' + starData.n_years + ' лет реальных данных (' + starData.forcing_file + '), enthalpy solver + bucket snow + MC ' + (DATA.metadata.star_pipeline || '');
+    content.appendChild(pipeHeader);
+
+    // Pipeline metrics
+    var pGrid = document.createElement('div');
+    pGrid.className = 'metrics-grid';
+    var pMetrics = [
+      [starData.maat_C + '\u00b0C', 'MAAT (реальн.)'],
+      [starData.thaw_depth_range_m[1] > 0 ? starData.thaw_depth_range_m[1] + 'м' : '<0.5м', 'СТС max'],
+      ['\u03b2=' + starData.beta, 'Индекс надёжности'],
+      ['P=' + (starData.p_failure * 100).toFixed(1) + '%', 'Вероятность отказа'],
+    ];
+    pMetrics.forEach(function(m) {
+      var card = document.createElement('div');
+      card.className = 'metric-card';
+      var vEl = document.createElement('div');
+      vEl.className = 'val';
+      vEl.style.fontSize = '18px';
+      vEl.textContent = m[0];
+      var lEl = document.createElement('div');
+      lEl.className = 'lbl';
+      lEl.textContent = m[1];
+      card.appendChild(vEl);
+      card.appendChild(lEl);
+      pGrid.appendChild(card);
+    });
+    content.appendChild(pGrid);
+
+    // SP25 category + recommendation
+    var sp25Div = document.createElement('div');
+    sp25Div.className = 'chart-box';
+    var sp25Title = document.createElement('h4');
+    sp25Title.textContent = 'Оценка по СП 25.13330.2020';
+    sp25Div.appendChild(sp25Title);
+    var catP = document.createElement('p');
+    catP.style.cssText = 'font-size:13px;margin-bottom:8px';
+    var catBadge = document.createElement('span');
+    catBadge.style.cssText = 'background:#b71c1c;color:#fff;padding:2px 10px;border-radius:10px;font-size:12px;font-weight:600';
+    catBadge.textContent = starData.sp25_category;
+    catP.appendChild(catBadge);
+    sp25Div.appendChild(catP);
+    var recP = document.createElement('p');
+    recP.style.cssText = 'font-size:12px;color:var(--text2);line-height:1.5';
+    recP.textContent = starData.recommended_action;
+    sp25Div.appendChild(recP);
+    content.appendChild(sp25Div);
+
+    // T(z) profile chart
+    var tzBox = document.createElement('div');
+    tzBox.className = 'chart-box';
+    var tzTitle = document.createElement('h4');
+    tzTitle.textContent = 'Температурный профиль T(z) — последний год';
+    tzBox.appendChild(tzTitle);
+    var tzCanvas = document.createElement('canvas');
+    tzCanvas.id = 'tzProfileChart';
+    tzCanvas.height = 200;
+    tzBox.appendChild(tzCanvas);
+    content.appendChild(tzBox);
+
+    // Bearing capacity timeline
+    if (starData.years && starData.years.length > 1) {
+      var bcTimeBox = document.createElement('div');
+      bcTimeBox.className = 'chart-box';
+      var bcTimeTitle = document.createElement('h4');
+      bcTimeTitle.textContent = 'Несущая способность по годам (MC 10,000)';
+      bcTimeBox.appendChild(bcTimeTitle);
+      var bcTimeCanvas = document.createElement('canvas');
+      bcTimeCanvas.id = 'bcTimelineChart';
+      bcTimeCanvas.height = 180;
+      bcTimeBox.appendChild(bcTimeCanvas);
+      content.appendChild(bcTimeBox);
+    }
+
+    // P(failure) timeline
+    if (starData.p_failure_by_year && starData.p_failure_by_year.length > 1) {
+      var pfBox = document.createElement('div');
+      pfBox.className = 'chart-box';
+      var pfTitle = document.createElement('h4');
+      pfTitle.textContent = 'Вероятность отказа P(failure) по годам';
+      pfBox.appendChild(pfTitle);
+      var pfCanvas = document.createElement('canvas');
+      pfCanvas.id = 'pfTimelineChart';
+      pfCanvas.height = 180;
+      pfBox.appendChild(pfCanvas);
+      content.appendChild(pfBox);
+    }
+  }
+
   // Nearby GTN-P boreholes
   const nearby = DATA.boreholes.filter(function(b) {
     return Math.abs(b.lat - star.lat) < 2 && Math.abs(b.lon - star.lon) < 5;
@@ -529,7 +626,10 @@ function openDetail(star) {
   panel.classList.add('open');
 
   // Render charts
-  setTimeout(function() { if (best) renderDetailCharts(best); }, 100);
+  setTimeout(function() {
+    if (best) renderDetailCharts(best);
+    if (starData) renderPipelineCharts(starData);
+  }, 100);
 }
 
 function renderDetailCharts(cell) {
@@ -581,6 +681,101 @@ function renderDetailCharts(cell) {
         scales: {
           y: { title: { display: true, text: '\u00b0C', color: '#8892a8' }, ticks: { color: '#8892a8' }, grid: { color: '#2a355522' } },
           x: { ticks: { color: '#8892a8' }, grid: { display: false } },
+        },
+      },
+    });
+  }
+}
+
+function renderPipelineCharts(sd) {
+  // T(z) profile
+  var tzCtx = document.getElementById('tzProfileChart');
+  if (tzCtx && sd.depth_m && sd.T_profile_mean_C) {
+    // Show depth on Y-axis (inverted), temperature on X-axis
+    // Use horizontal bar chart trick: depth labels, T values
+    var step = Math.max(1, Math.floor(sd.depth_m.length / 20));
+    var depths = [], tMean = [], tMin = [], tMax = [];
+    for (var i = 0; i < sd.depth_m.length; i += step) {
+      depths.push(sd.depth_m[i] + 'м');
+      tMean.push(sd.T_profile_mean_C[i]);
+      tMin.push(sd.T_profile_min_C[i]);
+      tMax.push(sd.T_profile_max_C[i]);
+    }
+    new Chart(tzCtx, {
+      type: 'line',
+      data: {
+        labels: depths,
+        datasets: [
+          { label: 'Среднее', data: tMean, borderColor: '#4fc3f7', backgroundColor: 'rgba(79,195,247,0.1)', fill: false, pointRadius: 1, borderWidth: 2 },
+          { label: 'Минимум', data: tMin, borderColor: '#2196f3', borderDash: [4,4], fill: false, pointRadius: 0, borderWidth: 1 },
+          { label: 'Максимум', data: tMax, borderColor: '#f44336', borderDash: [4,4], fill: false, pointRadius: 0, borderWidth: 1 },
+        ],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { labels: { color: '#8892a8', font: { size: 10 } } } },
+        scales: {
+          x: { title: { display: true, text: '\u00b0C', color: '#8892a8' }, ticks: { color: '#8892a8' }, grid: { color: '#2a355522' } },
+          y: { title: { display: true, text: 'Глубина', color: '#8892a8' }, ticks: { color: '#8892a8', font: { size: 9 } }, grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // Bearing capacity timeline
+  var bcTimeCtx = document.getElementById('bcTimelineChart');
+  if (bcTimeCtx && sd.years && sd.bearing_capacity_kPa) {
+    new Chart(bcTimeCtx, {
+      type: 'line',
+      data: {
+        labels: sd.years,
+        datasets: [{
+          label: 'BC (кПа)',
+          data: sd.bearing_capacity_kPa,
+          borderColor: '#66bb6a',
+          backgroundColor: 'rgba(102,187,106,0.1)',
+          fill: true, pointRadius: 1, borderWidth: 2,
+        }, {
+          label: 'Нагрузка (210 кПа)',
+          data: sd.years.map(function() { return 210; }),
+          borderColor: '#f44336',
+          borderDash: [6,3],
+          pointRadius: 0, borderWidth: 2, fill: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { labels: { color: '#8892a8', font: { size: 10 } } } },
+        scales: {
+          y: { title: { display: true, text: 'кПа', color: '#8892a8' }, ticks: { color: '#8892a8' }, grid: { color: '#2a355522' } },
+          x: { ticks: { color: '#8892a8', maxTicksLimit: 10 }, grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // P(failure) timeline
+  var pfCtx = document.getElementById('pfTimelineChart');
+  if (pfCtx && sd.p_failure_by_year) {
+    new Chart(pfCtx, {
+      type: 'bar',
+      data: {
+        labels: sd.years,
+        datasets: [{
+          data: sd.p_failure_by_year.map(function(p) { return p * 100; }),
+          backgroundColor: sd.p_failure_by_year.map(function(p) {
+            return p > 0.1 ? 'rgba(244,67,54,0.7)' : p > 0.01 ? 'rgba(255,152,0,0.7)' : 'rgba(76,175,80,0.7)';
+          }),
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { title: { display: true, text: 'P(failure), %', color: '#8892a8' }, ticks: { color: '#8892a8' }, grid: { color: '#2a355522' } },
+          x: { ticks: { color: '#8892a8', maxTicksLimit: 10 }, grid: { display: false } },
         },
       },
     });
