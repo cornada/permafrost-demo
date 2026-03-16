@@ -655,17 +655,36 @@ var currentCsMonth = 0;
 var csAnimInterval = null;
 var monthNames = ['Январь', 'Апрель', 'Июль', 'Октябрь'];
 
-// Generate synthetic cross-section data based on Yakutsk results
-function generateCsField(monthIdx) {
-  var W = 40, D = 30; // grid cells
-  var T = [];
-  // Base temperatures from Yakutsk profile
-  var yakData = STATIONS['Якутск'] || STATIONS[Object.keys(STATIONS)[0]];
-  var baseProfile = yakData.T_profile;
-  var depth = yakData.depth;
+// Station selection from URL hash (e.g. micro.html#station=Надым)
+var csStation = 'Надым'; // default to Nadym (primary star point)
+(function() {
+  var hash = window.location.hash;
+  var m = hash.match(/station=([^&]+)/);
+  if (m) {
+    var name = decodeURIComponent(m[1]);
+    if (STATIONS[name]) csStation = name;
+  }
+  // Update page title to reflect station
+  var titleEl = document.querySelector('.section#sec-cross h2');
+  if (titleEl) titleEl.textContent = 'Сечение грунта — ' + csStation;
+})();
 
-  // Monthly surface T offsets (Yakutsk climate)
-  var surfaceT = [-30, -15, 15, -5][monthIdx];
+// Surface T by station MAAT (approximate monthly extremes)
+var stationSurfaceT = {};
+for (var sn in STATIONS) {
+  var maat = STATIONS[sn].maat;
+  stationSurfaceT[sn] = [maat - 25, maat - 10, maat + 20, maat]; // Jan, Apr, Jul, Oct
+}
+
+// Generate cross-section data for selected station
+function generateCsField(monthIdx) {
+  var W = 40, D = 30;
+  var T = [];
+  var stData = STATIONS[csStation] || STATIONS[Object.keys(STATIONS)[0]];
+  var baseProfile = stData.T_profile;
+  var depth = stData.depth;
+
+  var surfaceT = (stationSurfaceT[csStation] || [-30, -15, 15, -5])[monthIdx];
 
   // Principle I: ventilated crawl space (SP 25.13330.2020)
   // Winter: open vents → cold wind cools ground BELOW ambient → negative effect (cooling)
@@ -893,6 +912,10 @@ window.addEventListener('resize', function() {
   if (document.getElementById('sec-cross').classList.contains('active')) drawCrossSection(currentCsMonth);
   if (document.getElementById('sec-whatif').classList.contains('active')) updateWhatIf();
 });
+// Auto-show cross-section if coming from heatmap with station hash
+if (window.location.hash.indexOf('station=') >= 0) {
+  showSection('cross');
+}
 </script>
 </body>
 </html>

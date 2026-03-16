@@ -839,6 +839,15 @@ function openDetail(star) {
   srcDiv.appendChild(document.createTextNode('Модель: Kudryavtsev (1974) + Stefan + СП 25.13330.2020'));
   content.appendChild(srcDiv);
 
+  // Link to micro-level demo
+  var microLink = document.createElement('a');
+  microLink.href = 'https://cornada.github.io/permafrost-demo/micro.html#station=' + encodeURIComponent(star.name);
+  microLink.target = '_blank';
+  microLink.rel = 'noopener';
+  microLink.style.cssText = 'display:block;margin-top:12px;padding:12px;background:rgba(79,195,247,0.08);border:1px solid rgba(79,195,247,0.3);border-radius:8px;color:var(--accent);text-decoration:none;font-size:13px;text-align:center;transition:all 0.2s';
+  microLink.textContent = '\u26cf\ufe0f Сечение грунта под фундаментом \u2192 микро-уровень';
+  content.appendChild(microLink);
+
   panel.classList.add('open');
 
   // Render charts
