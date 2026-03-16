@@ -123,6 +123,7 @@ body { font-family:'Inter',-apple-system,system-ui,sans-serif; background:var(--
       </div>
     </div>
     <div class="control-group toggle-gtnp">
+      <button class="btn active" id="infraToggle" onclick="toggleInfra()">Объекты Газпрома</button>
       <button class="btn active" id="gtnpToggle" onclick="toggleGTNP()">GTN-P скважины</button>
     </div>
   </div>
@@ -145,12 +146,29 @@ let currentMetric = 'magt';
 let gridLayer = null;
 let gtnpLayer = null;
 let starLayer = null;
+let infraLayer = null;
 let showGTNP = true;
+let showInfra = true;
 
 const STARS = [
   { name: 'Надым', lat: 65.5, lon: 72.5, desc: 'Штаб Газпром добыча Надым. Рекорд деградации: +62 см/десятилетие' },
   { name: 'Бованенково', lat: 70.4, lon: 68.3, desc: 'Крупнейшее месторождение Ямала (115 млрд м³/год). Кратеры 2023-2024 рядом' },
   { name: 'Норильск', lat: 69.3, lon: 88.1, desc: 'Кейс 2020: разлив 21К тонн, штраф 146 млрд руб. 70% зданий деформированы' },
+];
+
+// Gazprom infrastructure objects (grid-level data only, no full pipeline)
+const INFRA = [
+  { name: 'Бованенковское НГКМ', lat: 70.4, lon: 68.3, owner: 'Газпром', type: 'Месторождение', detail: '115 млрд м\u00b3/год, крупнейшее на Ямале' },
+  { name: 'Харасавэйское НГКМ', lat: 71.2, lon: 67.0, owner: 'Газпром', type: 'Месторождение', detail: 'Следующее в разработке, прибрежная зона' },
+  { name: 'Ямбургское НГКМ', lat: 67.9, lon: 75.5, owner: 'Газпром добыча Ямбург', type: 'Месторождение', detail: 'Гигантское НГКМ, в эксплуатации с 1986' },
+  { name: 'Заполярное НГКМ', lat: 67.0, lon: 79.5, owner: 'Газпром добыча Ямбург', type: 'Месторождение', detail: '3.5 трлн м\u00b3 запасов' },
+  { name: 'Уренгойское НГКМ', lat: 66.1, lon: 76.6, owner: 'Газпром', type: 'Месторождение', detail: 'Одно из крупнейших в мире, с 1978' },
+  { name: 'Новый Уренгой', lat: 66.08, lon: 76.68, owner: 'Газпром', type: 'Хаб', detail: 'Газовая столица, транспортный узел' },
+  { name: 'Надым', lat: 65.53, lon: 72.52, owner: 'Газпром добыча Надым', type: 'Штаб-квартира', detail: 'Рекорд деградации +62 см/десятилетие' },
+  { name: 'Мессояха (Вост.+Зап.)', lat: 69.1, lon: 79.0, owner: 'Газпром нефть', type: 'Месторождение', detail: 'Самая северная наземная нефтедобыча, 220K свай, мониторинг мерзлоты' },
+  { name: 'Новопортовское НГКМ', lat: 67.7, lon: 72.8, owner: 'Газпром нефть', type: 'Месторождение', detail: 'Арктическая нефть, п-ов Ямал' },
+  { name: 'Норильский промрайон', lat: 69.35, lon: 88.2, owner: 'Норникель / СОГАЗ', type: 'Промышленный район', detail: 'Кейс 2020, штраф 146 млрд руб, 70% зданий деформированы' },
+  { name: 'ТЭЦ-3 Норильск', lat: 69.38, lon: 88.35, owner: 'НТЭК / Норникель', type: 'Энергетика', detail: 'Разлив 21К тонн дизтоплива (2020), реконструкция 105 млрд руб' },
 ];
 
 // ── Color scales ──
@@ -334,6 +352,96 @@ function showBoreholePopup(b, layer) {
 }
 
 // ── Stars ──
+
+// ── Infrastructure objects ──
+
+function renderInfra() {
+  if (infraLayer) map.removeLayer(infraLayer);
+  if (!showInfra) return;
+  var markers = [];
+  var typeIcons = { '\u041c\u0435\u0441\u0442\u043e\u0440\u043e\u0436\u0434\u0435\u043d\u0438\u0435': '\u26cf\ufe0f', '\u0425\u0430\u0431': '\u26a1', '\u0428\u0442\u0430\u0431-\u043a\u0432\u0430\u0440\u0442\u0438\u0440\u0430': '\u1f3e2', '\u041f\u0440\u043e\u043c\u044b\u0448\u043b\u0435\u043d\u043d\u044b\u0439 \u0440\u0430\u0439\u043e\u043d': '\u1f3ed', '\u042d\u043d\u0435\u0440\u0433\u0435\u0442\u0438\u043a\u0430': '\u1f525' };
+  for (var i = 0; i < INFRA.length; i++) {
+    var obj = INFRA[i];
+    // Find nearest grid cell for metrics
+    var nearest = null, nearDist = Infinity;
+    for (var j = 0; j < DATA.grid.length; j++) {
+      var d = Math.abs(DATA.grid[j].lat - obj.lat) + Math.abs(DATA.grid[j].lon - obj.lon);
+      if (d < nearDist) { nearDist = d; nearest = DATA.grid[j]; }
+    }
+
+    var icon = L.divIcon({
+      html: '<div style="width:22px;height:22px;background:rgba(255,112,67,0.9);border:2px solid #fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)">' + (i + 1) + '</div>',
+      className: '', iconSize: [22, 22], iconAnchor: [11, 11],
+    });
+    var marker = L.marker([obj.lat, obj.lon], { icon: icon, zIndexOffset: 500 });
+    marker._infraData = obj;
+    marker._nearestCell = nearest;
+    marker.on('click', function() {
+      var o = this._infraData;
+      var cell = this._nearestCell;
+      var sc = cell ? cell.scenarios[currentScenario] : null;
+      var container = document.createElement('div');
+      container.className = 'cell-popup';
+      var h3 = document.createElement('h3');
+      h3.style.color = '#ff7043';
+      h3.textContent = o.name;
+      container.appendChild(h3);
+      var typeDiv = document.createElement('div');
+      typeDiv.style.cssText = 'font-size:11px;color:#8892a8;margin-bottom:6px';
+      typeDiv.textContent = o.owner + ' \u2014 ' + o.type;
+      container.appendChild(typeDiv);
+      var detDiv = document.createElement('div');
+      detDiv.style.cssText = 'font-size:12px;margin-bottom:8px;line-height:1.4';
+      detDiv.textContent = o.detail;
+      container.appendChild(detDiv);
+      if (sc) {
+        var rc2 = { low:'#4caf50', moderate:'#ffc107', elevated:'#ff5722', critical:'#d32f2f' };
+        var rows = [
+          ['MAGT (сценарий)', sc.magt + '\u00b0C'],
+          ['СТС (ALT)', sc.alt_m !== null ? sc.alt_m + ' м' : 'нет'],
+          ['Bearing capacity', sc.bearing_kPa + ' кПа'],
+          ['Запас прочности', sc.safety_ratio + '\u00d7'],
+        ];
+        rows.forEach(function(r) {
+          var row = document.createElement('div');
+          row.className = 'row';
+          var lbl = document.createElement('span');
+          lbl.className = 'label';
+          lbl.textContent = r[0];
+          var val = document.createElement('span');
+          val.className = 'val';
+          val.textContent = r[1];
+          row.appendChild(lbl);
+          row.appendChild(val);
+          container.appendChild(row);
+        });
+        var badge = document.createElement('span');
+        badge.className = 'risk-badge';
+        badge.style.cssText = 'background:' + (rc2[sc.risk] || '#888') + ';color:#fff';
+        badge.textContent = sc.risk_label;
+        var bw = document.createElement('div');
+        bw.appendChild(badge);
+        container.appendChild(bw);
+      }
+      var note = document.createElement('div');
+      note.style.cssText = 'margin-top:8px;font-size:10px;color:#666;font-style:italic';
+      note.textContent = 'Метрики из общей модели (сетка 0.5\u00b0). Детальный расчёт по запросу.';
+      container.appendChild(note);
+      this.bindPopup(container, { maxWidth: 300 }).openPopup();
+    });
+    marker.bindTooltip(obj.name, { permanent: false, direction: 'top', offset: [0, -12] });
+    markers.push(marker);
+  }
+  infraLayer = L.layerGroup(markers).addTo(map);
+}
+
+function toggleInfra() {
+  showInfra = !showInfra;
+  document.getElementById('infraToggle').classList.toggle('active', showInfra);
+  renderInfra();
+}
+
+// ── Star points ──
 
 function renderStars() {
   if (starLayer) map.removeLayer(starLayer);
@@ -887,6 +995,16 @@ function updateLegend() {
   gtnpItem.appendChild(document.createTextNode('GTN-P скважина'));
   div.appendChild(gtnpItem);
 
+  // Infra legend item
+  var infraItem = document.createElement('div');
+  infraItem.className = 'legend-item';
+  var infraIcon = document.createElement('div');
+  infraIcon.style.cssText = 'width:12px;height:12px;background:rgba(255,112,67,0.9);border:1.5px solid #fff;border-radius:3px;font-size:7px;color:#fff;text-align:center;line-height:12px;font-weight:700';
+  infraIcon.textContent = 'N';
+  infraItem.appendChild(infraIcon);
+  infraItem.appendChild(document.createTextNode('Объект Газпрома'));
+  div.appendChild(infraItem);
+
   // Star legend item
   var starItem = document.createElement('div');
   starItem.className = 'legend-item';
@@ -946,6 +1064,7 @@ async function init() {
   console.log('Loaded: ' + DATA.grid.length + ' cells, ' + DATA.boreholes.length + ' boreholes');
   renderGrid();
   renderGTNP();
+  renderInfra();
   renderStars();
   createLegend();
   createSourceBadge();
