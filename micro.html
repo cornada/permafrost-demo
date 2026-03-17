@@ -234,7 +234,7 @@ canvas { display:block; }
       <div class="cs-legend">
         <span style="color:var(--cold)">-35°C</span>
         <canvas id="csLegendBar" width="200" height="14"></canvas>
-        <span style="color:var(--warm)">+5°C</span>
+        <span style="color:var(--warm)">+20°C</span>
         <span style="margin-left:12px; color:var(--text2)">── 0°C изотерма (граница протаивания)</span>
       </div>
     </div>
@@ -749,22 +749,22 @@ function generateCsField(monthIdx) {
 }
 
 function tempToColor(T) {
-  // -35 to +5 color map (covers full January surface range)
-  var t = Math.max(-35, Math.min(5, T));
-  var frac = (t + 35) / 40; // 0=cold (-35), 1=warm (+5)
+  // Three-zone color map: -35°C (deep blue) → 0°C (white) → +20°C (deep red)
+  // 0°C is the critical permafrost threshold → white transition point
+  var t = Math.max(-35, Math.min(20, T));
   var r, g, b;
-  if (frac < 0.5) {
-    // Deep blue to light blue
-    var f = frac * 2;
-    r = Math.round(10 + f * 190);
-    g = Math.round(20 + f * 210);
-    b = Math.round(120 + f * 135);
+  if (t <= 0) {
+    // Frozen: deep blue (-35) → white (0)
+    var f = (t + 35) / 35; // 0=cold, 1=zero
+    r = Math.round(20 + f * 235);
+    g = Math.round(40 + f * 215);
+    b = Math.round(160 + f * 95);
   } else {
-    // Light blue/white to red
-    var f2 = (frac - 0.5) * 2;
-    r = Math.round(200 + f2 * 55);
-    g = Math.round(230 - f2 * 160);
-    b = Math.round(255 - f2 * 220);
+    // Thawed: white (0) → deep red (+20)
+    var f2 = t / 20; // 0=zero, 1=hot
+    r = Math.round(255);
+    g = Math.round(255 - f2 * 210);
+    b = Math.round(255 - f2 * 230);
   }
   return 'rgb(' + r + ',' + g + ',' + b + ')';
 }
@@ -876,7 +876,7 @@ function drawCrossSection(monthIdx) {
   var legCtx = legCanvas.getContext('2d');
   legCanvas.width = 200; legCanvas.height = 14;
   for (var li = 0; li < 200; li++) {
-    var lt = -35 + (li / 200) * 40;
+    var lt = -35 + (li / 200) * 55;
     legCtx.fillStyle = tempToColor(lt);
     legCtx.fillRect(li, 0, 1, 14);
   }
