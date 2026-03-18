@@ -115,8 +115,8 @@ section{padding:80px 24px}
   <h1>Система оценки рисков <em>вечной мерзлоты</em></h1>
   <div class="hero-sub">От карты России до фундамента здания — единая физическая модель с выходом на язык рисков</div>
   <div class="hero-stats">
-    <div class="stat"><div class="stat-num">228K</div><div class="stat-label">точек анализа</div></div>
-    <div class="stat"><div class="stat-num">2025–2060</div><div class="stat-label">горизонт прогноза</div></div>
+    <div class="stat"><div class="stat-num">428K</div><div class="stat-label">точек анализа</div></div>
+    <div class="stat"><div class="stat-num">88.7%</div><div class="stat-label">accuracy vs Obu</div></div>
     <div class="stat"><div class="stat-num">~11 км</div><div class="stat-label">разрешение сетки</div></div>
   </div>
   <div class="hero-scroll">АРХИТЕКТУРА</div>
@@ -191,7 +191,7 @@ section{padding:80px 24px}
       <div class="prop">
         <div class="prop-icon">🔬 → 🗺️</div>
         <h3>Макро → Микро</h3>
-        <p>Единственная система, работающая от масштаба страны (228 000 точек, 11 км) до отдельного фундамента. Таймлайн 2025–2060 с анимацией.</p>
+        <p>Единственная система, работающая от масштаба страны (428 000 точек, вся Россия + Казахстан) до отдельного фундамента. Таймлайн 2025–2060 с анимацией.</p>
       </div>
       <div class="prop">
         <div class="prop-icon">⚛️</div>
@@ -210,19 +210,20 @@ section{padding:80px 24px}
 <!-- ═══ CREDIBILITY + CTA ═══ -->
 <div class="cred">
   <div class="sec-title">Источники данных</div>
-  <div class="sec-sub" style="margin-bottom:32px">Три независимых источника — климат, наблюдения, нормы</div>
+  <div class="sec-sub" style="margin-bottom:32px">Пять независимых источников — климат, мерзлота, грунт, наблюдения, нормы</div>
   <div class="cred-sources">
     <div class="cred-chip"><strong>WorldClim v2.1</strong>Глобальная климатология<br>25 000+ цитирований</div>
-    <div class="cred-chip"><strong>HWSD v2.0 (FAO)</strong>Почвенная карта мира<br>29 500 почвенных единиц</div>
+    <div class="cred-chip"><strong>Obu et al. 2019</strong>TTOP модель мерзлоты<br>Earth-Science Reviews</div>
     <div class="cred-chip"><strong>GTN-P / PANGAEA</strong>Мониторинг мерзлоты<br>Nature Communications</div>
+    <div class="cred-chip"><strong>HWSD v2.0 (FAO)</strong>Почвенная карта мира<br>29 500 почвенных единиц</div>
     <div class="cred-chip"><strong>СП 25.13330.2020</strong>Строительные нормы РФ<br>Фундаменты на мерзлоте</div>
   </div>
-  <div class="cred-match">88% precision на 228 000 ячеек</div>
-  <div class="cred-match-sub">Калибровка по карте мерзлоты IPA (Brown et al. 2002) + 7 станций GTN-P / CALM</div>
-  <a class="cta-btn" href="https://cornada.github.io/permafrost-demo/v2.html">Открыть карту рисков v2 →</a>
+  <div class="cred-match">88.7% accuracy, RMSE 2.2°C</div>
+  <div class="cred-match-sub">Верификация: Obu et al. 2019 (428K ячеек) + 54 скважины GTN-P / CALM</div>
+  <a class="cta-btn" href="https://cornada.github.io/permafrost-demo/v2.html">Открыть карту рисков →</a>
 </div>
 
-<div class="footer">Permafrost Risk Intelligence — прототип 2026 | Данные: WorldClim, HWSD (FAO), GTN-P (Biskaborn et al. 2019), CMIP6, СП 25.13330.2020 | MapLibre GL</div>
+<div class="footer">Permafrost Risk Intelligence — прототип 2026 | Данные: WorldClim, Obu et al. 2019, CMIP6, HWSD (FAO), GTN-P, СП 25.13330.2020 | MapLibre GL</div>
 
 </body>
 </html>
